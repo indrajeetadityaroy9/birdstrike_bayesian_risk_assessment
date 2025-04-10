@@ -596,27 +596,6 @@ class BirdStrikeRiskSystem:
         plt.xlabel('Flight Phase')
         plt.tight_layout()
         plt.show()
-    
-    def integrate_with_radar(self, radar_data, weather_data=None):
-        """
-        Integrate FAA historical data with real-time radar detection
-        and optional weather data for enhanced risk assessment
-        """
-        # This would be implemented to combine the historical risk patterns
-        # with real-time radar detection of bird flocks
-        # For now, this is a placeholder for the integration logic
-        pass
-    
-    def generate_risk_report(self, output_path="risk_report.html"):
-        """Generate a comprehensive risk report based on the analysis"""
-        if self.faa_data is None:
-            print("No FAA data loaded. Please load data first.")
-            return
-        
-        # This would generate an HTML report with visualizations
-        # and risk assessment findings
-        # For now, this is a placeholder for the report generation logic
-        pass
 
 
 # Example usage
