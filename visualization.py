@@ -146,3 +146,35 @@ def plot_risk_assessment(grid_x, grid_y, objective_values, true_position, estima
     
     plt.tight_layout()
     plt.show()
+
+def plot_migration_patterns(grid_x, grid_y, migration_data, flock_species):
+    """Plot historical migration patterns from GPS data"""
+    plt.figure(figsize=(10, 8))
+    
+    # Plot airport and runways
+    plt.plot(0, 0, 'ko', markersize=10, label='Airport')
+    
+    # Plot migration paths for relevant species
+    for species in flock_species:
+        if species == "Gull":
+            bird_name = "Eric"  # Map to tracked bird
+        elif species == "Goose":
+            bird_name = "Sanne"
+        else:
+            bird_name = "Nico"
+            
+        bird_data = migration_data.data[migration_data.data['bird_name'] == bird_name]
+        
+        # Convert GPS to local coordinates (simplified)
+        x_coords = (bird_data['longitude'] - bird_data['longitude'].iloc[0]) * 0.1
+        y_coords = (bird_data['latitude'] - bird_data['latitude'].iloc[0]) * 0.1
+        
+        plt.plot(x_coords, y_coords, 'o-', alpha=0.5, 
+                 label=f'Historical {species} Path')
+    
+    plt.title('Bird Migration Patterns from GPS Tracking Data')
+    plt.xlabel('x (km)')
+    plt.ylabel('y (km)')
+    plt.legend()
+    plt.grid(True)
+    plt.show()

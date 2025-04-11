@@ -45,3 +45,19 @@ def evaluate_map_objective_grid(grid_x, grid_y, z, sensors_x, sensors_y, sensors
             )
     
     return objective_values
+
+def gps_to_local_coords(lat, lon, alt, airport_lat, airport_lon, airport_alt):
+    """Convert GPS coordinates to local airport-centric coordinates"""
+    # Simplified conversion (in a real system, use proper formulas)
+    x = (lon - airport_lon) * 111.32 * np.cos(np.radians(airport_lat))  # km
+    y = (lat - airport_lat) * 110.574  # km
+    z = (alt - airport_alt) / 1000.0  # convert m to km
+    return x, y, z
+
+def local_to_gps_coords(x, y, z, airport_lat, airport_lon, airport_alt):
+    """Convert local coordinates back to GPS"""
+    # Simplified conversion
+    lon = airport_lon + x / (111.32 * np.cos(np.radians(airport_lat)))
+    lat = airport_lat + y / 110.574
+    alt = airport_alt + z * 1000.0  # km to m
+    return lat, lon, alt

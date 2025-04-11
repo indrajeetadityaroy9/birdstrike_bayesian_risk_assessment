@@ -5,37 +5,9 @@ import pandas as pd
 from scipy.optimize import minimize
 from utility import calculate_distance_3d, evaluate_map_objective_grid, compute_map_objective
 from visualization import plot_risk_assessment
-from bird_behavior import get_bird_priors, simulate_bird_movement
+from bird_behavior import MigrationDataProcessor, get_bird_priors, simulate_bird_movement, calculate_distance_to_path
 from statistics_module import RiskStatistics
-from bird_strike_system import BirdStrikeRiskSystem  # Import the new FAA-based system
-
-def calculate_distance_to_path(position, path):
-    """Calculate the distance from a position to a flight path"""
-    x, y, z = position
-    start_x, start_y, start_z = path["start"]
-    end_x, end_y, end_z = path["end"]
-    
-    # Calculate vector along path
-    v_x = end_x - start_x
-    v_y = end_y - start_y
-    v_z = end_z - start_z
-    
-    # Parameter of closest point on line
-    denominator = v_x * v_x + v_y * v_y + v_z * v_z
-    if denominator == 0:
-        # Handle degenerate case (start and end are the same point)
-        return np.sqrt((x - start_x)**2 + (y - start_y)**2 + (z - start_z)**2)
-    
-    t = ((x - start_x) * v_x + (y - start_y) * v_y + (z - start_z) * v_z) / denominator
-    t = max(0, min(1, t))  # Constrain to line segment
-    
-    # Calculate closest point on path
-    closest_x = start_x + t * v_x
-    closest_y = start_y + t * v_y
-    closest_z = start_z + t * v_z
-    
-    # Calculate distance to path
-    return np.sqrt((x - closest_x)**2 + (y - closest_y)**2 + (z - closest_z)**2)
+from bird_strike_system import BirdStrikeRiskSystem
 
 def get_seasonal_risk_summary(faa_risk_system, season):
     """
@@ -86,6 +58,27 @@ def main():
 
     # Define standard deviations for Gaussian priors and measurement noise
     sigma_x, sigma_y, sigma_z, sigma_noise = 0.25, 0.25, 0.15, 0.3
+
+    # Initialize the migration data processor with robust error handling
+    try:
+        migration_processor = MigrationDataProcessor('bird_migration.csv')
+        print("Successfully loaded bird migration data")
+    except Exception as e:
+        print(f"Error loading bird migration data: {str(e)}")
+        print("Creating fallback migration data")
+        # Create a minimal dummy dataset
+        dummy_data = pd.DataFrame({
+            'bird_name': ['Eric', 'Sanne', 'Nico'] * 10,
+            'date_time': pd.date_range(start='2023-01-01', periods=30, freq='D'),
+            'latitude': np.random.normal(50, 0.5, 30),
+            'longitude': np.random.normal(5, 0.5, 30),
+            'altitude': np.random.normal(100, 20, 30),
+            'speed_2d': np.random.normal(10, 2, 30)
+        })
+        # Save the dummy data as CSV
+        dummy_data.to_csv('bird_migration.csv', index=False)
+        # Try again with the dummy data
+        migration_processor = MigrationDataProcessor('bird_migration.csv')
 
     # Initialize the FAA risk assessment system with robust error handling
     try:
@@ -178,7 +171,15 @@ def main():
             print(f"True Position: ({x_t:.2f}, {y_t:.2f}, {z_t:.2f})")
             
             # Get bird behavior priors based on environmental factors
-            prior_params = get_bird_priors(x_t, y_t, z_t, time_of_day, season, weather)
+            # Pass the migration_processor instance explicitly
+            prior_params = get_bird_priors(
+                x_t, y_t, z_t, 
+                time_of_day, 
+                season, 
+                weather, 
+                bird_type=flock_species[flock_idx],
+                migration_data=migration_processor
+            )
             
             # Generate noisy range measurements from each sensor
             measurements = []
@@ -315,8 +316,14 @@ def main():
             print(f"Error generating time step summary: {str(e)}")
         
         # Update bird positions for next time step using movement model
+        # Pass the migration_processor instance explicitly
         true_flock_positions = simulate_bird_movement(
-            true_flock_positions, time_of_day, season, weather, flight_paths
+            true_flock_positions,
+            time_of_day,
+            season,
+            weather,
+            flight_paths,
+            migration_data=migration_processor
         )
         
         # Record flock positions for movement analysis
