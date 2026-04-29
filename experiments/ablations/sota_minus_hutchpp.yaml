@@ -1,0 +1,14 @@
+# Delta: hessian_mode hutchpp -> hutchinson (everything else = SOTA)
+# Tests: Value of Hutch++ over plain Hutchinson trace estimation
+name: SOTA-minus-HutchPP
+description: "Clean ablation: use plain Hutchinson instead of Hutch++ (single delta from SOTA)"
+model:
+  low_rank_dim: 64
+  hutchinson_samples: 20
+  num_ensemble: 4
+  hessian_mode: hutchinson
+  lipschitz_gamma: 1.0
+  augmentation: true
+evaluation:
+  num_seeds: 10
+  metrics: [rmse, nll, coverage_95, crps, dss, ause]

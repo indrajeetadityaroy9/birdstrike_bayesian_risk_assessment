@@ -1,0 +1,10 @@
+# Standard GP Baseline Configuration
+# Reference: Rasmussen & Williams (2006)
+
+model_type: standard_gp
+model:
+  input_dim: 19
+  max_train: 2000
+
+training:
+  n_iter: 100

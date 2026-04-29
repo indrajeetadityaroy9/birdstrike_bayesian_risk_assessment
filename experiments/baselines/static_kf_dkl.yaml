@@ -1,0 +1,10 @@
+name: Static-KF-DKL
+description: "Static Kalman filter covariance baseline (no augmentation)"
+model:
+  low_rank_dim: 64
+  hutchinson_samples: 10
+  num_ensemble: 4
+  augmentation: false
+evaluation:
+  num_seeds: 10
+  metrics: [rmse, nll, coverage_95, crps]

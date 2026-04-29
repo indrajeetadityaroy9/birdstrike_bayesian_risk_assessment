@@ -1,0 +1,10 @@
+name: Standard-GP-DKL
+description: "Standard GP-DKL baseline with no Hessian corrections"
+model:
+  low_rank_dim: 64
+  hutchinson_samples: 10
+  num_ensemble: 4
+  hessian_mode: none
+evaluation:
+  num_seeds: 10
+  metrics: [rmse, nll, coverage_95, crps]

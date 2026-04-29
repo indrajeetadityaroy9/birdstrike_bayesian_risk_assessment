@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools==75.8.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dkrl"
+version = "0.7.0"
+description = "Second-Order NIGP Deep Kernel Learning for Uncertainty-Aware Risk Prediction"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    # Core numerical computing
+    "numpy==1.26.4",
+    "scipy==1.12.0",
+    "pandas==2.2.2",
+
+    # Deep learning
+    "torch==2.7.0",
+    "gpytorch==1.15.1",
+    "linear-operator==0.6.0",
+
+    # JAX for evaluation metrics
+    "jax[cuda12]==0.6.0",
+
+    # Scoring rules (peer-reviewed implementations)
+    "scoringrules[jax]>=0.9.0",
+
+    # Optimization
+    "prodigyopt==1.0.0",
+
+    # GPU Acceleration (H100 Required)
+    "triton==3.3.0",
+    "faiss-cpu==1.13",
+
+    # Config
+    "pyyaml==6.0.2",
+
+    # Visualization
+    "matplotlib==3.9.2",
+]
+
+[tool.setuptools.packages.find]
+include = ["dkrl", "dkrl.*"]

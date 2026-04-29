@@ -1,0 +1,9 @@
+name: NIGP-DKL
+description: "Full SOTA: second-order NIGP with low-rank GP, dissipative layers, Hutchinson trace"
+model:
+  low_rank_dim: 64
+  hutchinson_samples: 20
+  num_ensemble: 4
+evaluation:
+  num_seeds: 10
+  metrics: [rmse, nll, coverage_95, crps, dss, ause]

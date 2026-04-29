@@ -1,0 +1,14 @@
+# Delta: augmentation true -> false (everything else = SOTA)
+# Tests: Value of covariance-based data augmentation
+name: SOTA-minus-Augmentation
+description: "Clean ablation: disable data augmentation (single delta from SOTA)"
+model:
+  low_rank_dim: 64
+  hutchinson_samples: 20
+  num_ensemble: 4
+  hessian_mode: hutchpp
+  lipschitz_gamma: 1.0
+  augmentation: false
+evaluation:
+  num_seeds: 10
+  metrics: [rmse, nll, coverage_95, crps, dss, ause]

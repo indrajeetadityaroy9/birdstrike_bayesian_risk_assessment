@@ -1,0 +1,10 @@
+name: SigmaPoint-NIGP
+description: "Deep Sigma Point Processes with baseline config"
+sigma_point: true
+model:
+  low_rank_dim: 64
+  hutchinson_samples: 10
+  num_ensemble: 4
+evaluation:
+  num_seeds: 10
+  metrics: [rmse, nll, coverage_95, crps]

@@ -1,0 +1,18 @@
+# MC Dropout Baseline Configuration
+# Reference: Gal & Ghahramani (2016)
+
+model_type: mc_dropout
+model:
+  input_dim: 19
+  hidden_dim: 76
+  dropout_rate: 0.1
+  n_forward: 30
+
+training:
+  epochs: 500
+  lr: 0.001
+  batch_size: 256
+  optimizer: adam
+  early_stopping:
+    patience: 20
+    metric: val_rmse
