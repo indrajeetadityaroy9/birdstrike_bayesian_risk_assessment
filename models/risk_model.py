@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 import warnings
+import json
 from scipy.stats import beta
+from scipy.special import logit, expit
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import SimpleImputer, IterativeImputer
 from sklearn.preprocessing import OrdinalEncoder
@@ -14,13 +16,11 @@ logger = get_logger(__name__)
 warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
-
 def update_beta_params(prior_alpha, prior_beta, successes, failures):
     epsilon = 1e-6
     posterior_alpha = prior_alpha + successes
     posterior_beta = prior_beta + failures + epsilon
     return posterior_alpha, posterior_beta
-
 
 class BirdStrikeRiskSystem:
     def __init__(self, faa_data_path=None, use_preprocessed=True, spatial_profiles_path='spatial_risk_profiles.json'):
@@ -56,9 +56,6 @@ class BirdStrikeRiskSystem:
         self._load_spatial_profiles()
 
     def _load_spatial_profiles(self):
-        
-        import json
-
         spatial_path = pathlib.Path(self.spatial_profiles_path)
         with open(spatial_path, 'r') as f:
             self.spatial_risk_profiles = json.load(f)
@@ -275,7 +272,6 @@ class BirdStrikeRiskSystem:
             logger.debug(f"SpeciesGroup Beta Params calculated for {len(self.species_damage_prob_profiles)} groups.")
             logger.info("OK: SpeciesGroup Beta Params analyzed.")
 
-
         except Exception as e:
             logger.error(f"FAIL: Hierarchical species analysis: {e}", exc_info=True)
             self.family_damage_prob_profiles = pd.DataFrame(
@@ -468,10 +464,7 @@ class BirdStrikeRiskSystem:
             f"[RiskParams] Month/Season='{month}/{season}': Using Beta(a={alpha:.2f}, b={beta_val:.2f}) from {source}")
         return alpha, beta_val
 
-    def calculate_probabilistic_risk_metrics(self, bird_position, flight_path,
-                                             family_group=None, species_group=None,
-                                             month=None, season=None,
-                                             airport=None, state=None):
+    def calculate_probabilistic_risk_metrics(self, bird_position, flight_path, family_group=None, species_group=None, month=None, season=None, airport=None, state=None):
         n_samples = self.risk_params['mc_samples']
         log_prefix = f"[RiskCalc Pos={hash(tuple(bird_position))}]"
 
@@ -504,16 +497,14 @@ class BirdStrikeRiskSystem:
             p_damage_samples_species = np.full(n_samples, mean_p_damage_species)
             p_damage_samples_temporal = np.full(n_samples, mean_p_damage_temporal)
 
-        epsilon = 1e-9
-
         base_prob = self.beta_prior_alpha / (self.beta_prior_alpha + self.beta_prior_beta)
-        base_log_odds_term = np.log((base_prob + epsilon) / (1 - base_prob + epsilon))
+        base_log_odds_term = logit(base_prob)
 
-        log_odds_species = np.log((p_damage_samples_species + epsilon) / (1 - p_damage_samples_species + epsilon))
+        log_odds_species = logit(p_damage_samples_species)
         log_odds_ratio_species = log_odds_species - base_log_odds_term
         species_log_odds_contrib = self.risk_params['species_log_odds_scale'] * log_odds_ratio_species
 
-        log_odds_temporal = np.log((p_damage_samples_temporal + epsilon) / (1 - p_damage_samples_temporal + epsilon))
+        log_odds_temporal = logit(p_damage_samples_temporal)
         log_odds_ratio_temporal = log_odds_temporal - base_log_odds_term
         temporal_log_odds_contrib = self.risk_params['temporal_log_odds_scale'] * log_odds_ratio_temporal
 
@@ -539,8 +530,8 @@ class BirdStrikeRiskSystem:
         logger.debug(
             f"{log_prefix} Combined LogOdds: Mean={np.mean(total_log_odds_samples):.3f}, Std={np.std(total_log_odds_samples):.3f}")
 
-        posterior_prob_samples = 1.0 / (1.0 + np.exp(-total_log_odds_samples))
-                                                                                             
+        posterior_prob_samples = expit(total_log_odds_samples)
+
         posterior_prob_samples = np.clip(posterior_prob_samples, 1e-8, 1.0 - 1e-8)
 
         mean_prob = np.mean(posterior_prob_samples)

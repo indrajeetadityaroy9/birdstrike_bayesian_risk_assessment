@@ -2,10 +2,11 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 from scipy.stats import beta, ks_2samp, entropy
+from scipy.special import betaln, digamma
+import arviz as az
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
-
 
 class PosteriorAnalyzer:
 
@@ -14,8 +15,7 @@ class PosteriorAnalyzer:
         self.posterior_samples = {}
         self.convergence_metrics = {}
 
-    def track_beta_evolution(self, species, alpha, beta_param,
-                             iteration, prior_alpha=1, prior_beta=9):
+    def track_beta_evolution(self, species, alpha, beta_param, iteration, prior_alpha=1, prior_beta=9):
         if species not in self.beta_history:
             self.beta_history[species] = {
                 'iterations': [],
@@ -44,9 +44,7 @@ class PosteriorAnalyzer:
         self.beta_history[species]['variance'].append(variance)
         self.beta_history[species]['mode'].append(mode)
 
-    def posterior_predictive_check(self, observed_data,
-                                   alpha, beta_param,
-                                   n_simulations=1000):
+    def posterior_predictive_check(self, observed_data, alpha, beta_param, n_simulations=1000):
         n_obs = len(observed_data)
 
         ppc_samples = []
@@ -89,45 +87,32 @@ class PosteriorAnalyzer:
 
         samples_post_warmup = samples[warmup:]
 
+        samples_reshaped = samples_post_warmup.reshape(1, -1)
+        idata = az.convert_to_inference_data({'param': samples_reshaped})
+
+        summary = az.summary(idata, kind="diagnostics")
+
+        ess_bulk = summary.loc['param', 'ess_bulk'] if 'ess_bulk' in summary.columns else np.nan
+        ess_tail = summary.loc['param', 'ess_tail'] if 'ess_tail' in summary.columns else np.nan
+        r_hat = summary.loc['param', 'r_hat'] if 'r_hat' in summary.columns else np.nan
+        mcse_mean = summary.loc['param', 'mcse_mean'] if 'mcse_mean' in summary.columns else np.nan
+
         n_samples = len(samples_post_warmup)
         first_portion = samples_post_warmup[:int(n_samples * 0.1)]
         last_portion = samples_post_warmup[int(n_samples * 0.5):]
-
         geweke_z = (np.mean(first_portion) - np.mean(last_portion)) / \
                    np.sqrt(np.var(first_portion) / len(first_portion) + \
                           np.var(last_portion) / len(last_portion))
 
-        def autocorrelation(x, lag):
-            if lag >= len(x):
-                return 0
-            x_centered = x - np.mean(x)
-            c0 = np.dot(x_centered, x_centered) / len(x)
-            ct = np.dot(x_centered[:-lag], x_centered[lag:]) / (len(x) - lag)
-            return ct / c0 if c0 > 0 else 0
-
-        max_lag = min(len(samples_post_warmup) // 4, 100)
-        autocorr_values = []
-        for lag in range(1, max_lag):
-            ac = autocorrelation(samples_post_warmup, lag)
-            autocorr_values.append(ac)
-            if ac < 0:
-                break
-
-        if autocorr_values:
-            sum_autocorr = 1 + 2 * sum(autocorr_values)
-            ess = len(samples_post_warmup) / max(sum_autocorr, 1)
-        else:
-            ess = len(samples_post_warmup)
-
-        mcse = np.std(samples_post_warmup) / np.sqrt(ess)
-
         return {
             'geweke_z': geweke_z,
             'geweke_p_value': 2 * (1 - stats.norm.cdf(abs(geweke_z))),
-            'effective_sample_size': ess,
-            'mcse': mcse,
-            'n_samples': len(samples_post_warmup),
-            'autocorr_values': autocorr_values[:10] if autocorr_values else []
+            'effective_sample_size': ess_bulk,
+            'ess_bulk': ess_bulk,
+            'ess_tail': ess_tail,
+            'r_hat': r_hat,
+            'mcse': mcse_mean,
+            'n_samples': len(samples_post_warmup)
         }
 
     def print_beta_evolution(self, species):
@@ -170,10 +155,10 @@ class PosteriorAnalyzer:
         prior_var = (history['prior_alpha'] * history['prior_beta']) / \
                     ((history['prior_alpha'] + history['prior_beta'])**2 * \
                      (history['prior_alpha'] + history['prior_beta'] + 1))
-        print(f"Prior variance:      {prior_var:.6f}")
-        print(f"Initial variance:    {history['variance'][0]:.6f}")
-        print(f"Final variance:      {history['variance'][-1]:.6f}")
-        print(f"Variance reduction:  {(1 - history['variance'][-1]/prior_var)*100:.2f}%")
+        print(f"Prior variance: {prior_var:.6f}")
+        print(f"Initial variance: {history['variance'][0]:.6f}")
+        print(f"Final variance: {history['variance'][-1]:.6f}")
+        print(f"Variance reduction: {(1 - history['variance'][-1]/prior_var)*100:.2f}%")
 
         print(f"\n4. DISTRIBUTION SHAPE AT KEY ITERATIONS")
         print("-"*80)
@@ -200,9 +185,9 @@ class PosteriorAnalyzer:
             kl = self._beta_kl_divergence(a, b, prior_alpha, prior_beta)
             kl_divergences.append(kl)
 
-        print(f"Initial KL divergence:  {kl_divergences[0]:.6f} nats")
-        print(f"Final KL divergence:    {kl_divergences[-1]:.6f} nats")
-        print(f"Average KL divergence:  {np.mean(kl_divergences):.6f} nats")
+        print(f"Initial KL divergence: {kl_divergences[0]:.6f} nats")
+        print(f"Final KL divergence: {kl_divergences[-1]:.6f} nats")
+        print(f"Average KL divergence: {np.mean(kl_divergences):.6f} nats")
         print(f"Total information gain: {kl_divergences[-1]:.6f} nats")
 
         print(f"\n6. EFFECTIVE SAMPLE SIZE")
@@ -210,15 +195,13 @@ class PosteriorAnalyzer:
         variance_ratio = np.array(history['variance']) / prior_var
         effective_n = 1 / variance_ratio - 1
 
-        print(f"Initial effective N:    {effective_n[0]:.2f}")
-        print(f"Final effective N:      {effective_n[-1]:.2f}")
-        print(f"Effective data growth:  {effective_n[-1] - effective_n[0]:.2f}")
+        print(f"Initial effective N: {effective_n[0]:.2f}")
+        print(f"Final effective N: {effective_n[-1]:.2f}")
+        print(f"Effective data growth: {effective_n[-1] - effective_n[0]:.2f}")
 
         print("\n" + "="*80)
 
     def _beta_kl_divergence(self, a1, b1, a2, b2):
-        from scipy.special import betaln, digamma
-
         kl = betaln(a2, b2) - betaln(a1, b1)
         kl += (a1 - a2) * digamma(a1)
         kl += (b1 - b2) * digamma(b1)
@@ -233,29 +216,29 @@ class PosteriorAnalyzer:
 
         print(f"\n1. TEST STATISTICS SUMMARY")
         print("-"*80)
-        print(f"Observed mean:       {ppc_results['observed_mean']:.6f}")
-        print(f"Observed variance:   {ppc_results['observed_var']:.6f}")
-        print(f"Observed sum:        {ppc_results['observed_sum']}")
+        print(f"Observed mean: {ppc_results['observed_mean']:.6f}")
+        print(f"Observed variance: {ppc_results['observed_var']:.6f}")
+        print(f"Observed sum: {ppc_results['observed_sum']}")
 
         print(f"\n2. PPC DISTRIBUTIONS")
         print("-"*80)
-        print(f"PPC mean range:      [{np.min(ppc_results['ppc_means']):.6f}, {np.max(ppc_results['ppc_means']):.6f}]")
-        print(f"PPC mean avg:        {np.mean(ppc_results['ppc_means']):.6f}")
-        print(f"PPC mean std:        {np.std(ppc_results['ppc_means']):.6f}")
+        print(f"PPC mean range: [{np.min(ppc_results['ppc_means']):.6f}, {np.max(ppc_results['ppc_means']):.6f}]")
+        print(f"PPC mean avg: {np.mean(ppc_results['ppc_means']):.6f}")
+        print(f"PPC mean std: {np.std(ppc_results['ppc_means']):.6f}")
 
-        print(f"\nPPC variance range:  [{np.min(ppc_results['ppc_vars']):.6f}, {np.max(ppc_results['ppc_vars']):.6f}]")
-        print(f"PPC variance avg:    {np.mean(ppc_results['ppc_vars']):.6f}")
-        print(f"PPC variance std:    {np.std(ppc_results['ppc_vars']):.6f}")
+        print(f"\nPPC variance range: [{np.min(ppc_results['ppc_vars']):.6f}, {np.max(ppc_results['ppc_vars']):.6f}]")
+        print(f"PPC variance avg: {np.mean(ppc_results['ppc_vars']):.6f}")
+        print(f"PPC variance std: {np.std(ppc_results['ppc_vars']):.6f}")
 
-        print(f"\nPPC sum range:       [{np.min(ppc_results['ppc_sums'])}, {np.max(ppc_results['ppc_sums'])}]")
-        print(f"PPC sum avg:         {np.mean(ppc_results['ppc_sums']):.2f}")
-        print(f"PPC sum std:         {np.std(ppc_results['ppc_sums']):.2f}")
+        print(f"\nPPC sum range: [{np.min(ppc_results['ppc_sums'])}, {np.max(ppc_results['ppc_sums'])}]")
+        print(f"PPC sum avg: {np.mean(ppc_results['ppc_sums']):.2f}")
+        print(f"PPC sum std: {np.std(ppc_results['ppc_sums']):.2f}")
 
         print(f"\n3. P-VALUES (Model Adequacy)")
         print("-"*80)
-        print(f"Mean statistic p-value:      {ppc_results['p_value_mean']:.4f}")
-        print(f"Variance statistic p-value:  {ppc_results['p_value_var']:.4f}")
-        print(f"Sum statistic p-value:       {ppc_results['p_value_sum']:.4f}")
+        print(f"Mean statistic p-value: {ppc_results['p_value_mean']:.4f}")
+        print(f"Variance statistic p-value: {ppc_results['p_value_var']:.4f}")
+        print(f"Sum statistic p-value: {ppc_results['p_value_sum']:.4f}")
 
         print(f"\n4. INTERPRETATION")
         print("-"*80)
@@ -265,9 +248,9 @@ class PosteriorAnalyzer:
         var_pass = "PASS" if ppc_results['p_value_var'] > alpha else "FAIL"
         sum_pass = "PASS" if ppc_results['p_value_sum'] > alpha else "FAIL"
 
-        print(f"Mean test (α={alpha}):       {mean_pass}")
-        print(f"Variance test (α={alpha}):   {var_pass}")
-        print(f"Sum test (α={alpha}):        {sum_pass}")
+        print(f"Mean test (α={alpha}): {mean_pass}")
+        print(f"Variance test (α={alpha}): {var_pass}")
+        print(f"Sum test (α={alpha}): {sum_pass}")
 
         if all([ppc_results['p_value_mean'] > alpha,
                 ppc_results['p_value_var'] > alpha,
@@ -278,8 +261,7 @@ class PosteriorAnalyzer:
 
         print("\n" + "="*80)
 
-    def print_credible_regions(self, alpha, beta_param,
-                               levels=None):
+    def print_credible_regions(self, alpha, beta_param, levels=None):
         if levels is None:
             levels = [0.5, 0.9, 0.95]
         print("\n" + "="*80)
@@ -297,10 +279,10 @@ class PosteriorAnalyzer:
 
         print(f"\n1. DISTRIBUTION SUMMARY")
         print("-"*80)
-        print(f"Mean:              {mean:.6f}")
-        print(f"Mode:              {mode_str}")
-        print(f"Variance:          {variance:.6f}")
-        print(f"Std deviation:     {np.sqrt(variance):.6f}")
+        print(f"Mean: {mean:.6f}")
+        print(f"Mode: {mode_str}")
+        print(f"Variance: {variance:.6f}")
+        print(f"Std deviation: {np.sqrt(variance):.6f}")
 
         print(f"\n2. EQUAL-TAILED CREDIBLE INTERVALS")
         print("-"*80)
@@ -340,7 +322,6 @@ class PosteriorAnalyzer:
         n = len(sorted_samples)
         interval_size = int(n * level)
 
-        # Find the shortest interval containing level% of samples
         best_width = np.inf
         best_lower = 0
         best_upper = 0
@@ -366,24 +347,20 @@ class PosteriorAnalyzer:
 
             history = self.beta_history[species]
 
-            # Final parameters
             final_alpha = history['alpha'][-1] if history['alpha'] else 1
             final_beta = history['beta'][-1] if history['beta'] else 9
 
-            # KL divergence from prior
             kl_div = self._beta_kl_divergence(
                 final_alpha, final_beta,
                 history['prior_alpha'], history['prior_beta']
             )
 
-            # Variance reduction
             prior_var = (history['prior_alpha'] * history['prior_beta']) / \
                        ((history['prior_alpha'] + history['prior_beta'])**2 * \
                         (history['prior_alpha'] + history['prior_beta'] + 1))
             final_var = history['variance'][-1] if history['variance'] else prior_var
             var_reduction = 1 - (final_var / prior_var)
 
-            # Effective sample size
             ess = (final_alpha + final_beta) - (history['prior_alpha'] + history['prior_beta'])
 
             results.append({

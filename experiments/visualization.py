@@ -38,7 +38,6 @@ def configure_visualization(enable_plots=True):
     logger.info("Matplotlib configured.")
     return True
 
-
 def plot_simulation_results(results, output_dir):
     logger.info("Generating probabilistic plots...")
     timestamps = results.get("timestamps", [])
@@ -98,17 +97,7 @@ def plot_simulation_results(results, output_dir):
         plt.close()
         logger.info("Saved %s", path)
 
-
-def plot_risk_map_snapshot(
-    risk_mapper,
-    scenario,
-    estimated_positions,
-    trackers,
-    true_positions,
-    output_dir,
-    iteration_index,
-    z_level=0.5,
-):
+def plot_risk_map_snapshot(risk_mapper, scenario, estimated_positions, trackers, true_positions, output_dir, iteration_index, z_level=0.5):
     fig, ax = plt.subplots(figsize=(12, 10))
     plot_est = [list(p) if p is not None else None for p in estimated_positions]
     plot_true = [list(p) if p is not None else None for p in true_positions]
@@ -131,17 +120,7 @@ def plot_risk_map_snapshot(
     plt.close(fig)
     logger.info("Saved %s", plot_path)
 
-
-def plot_difference_maps(
-    risk_mapper,
-    prev_risk_maps,
-    scenario,
-    trackers,
-    estimated_positions,
-    output_dir,
-    iteration_index,
-    z_level=0.5,
-):
+def plot_difference_maps(risk_mapper, prev_risk_maps, scenario, trackers, estimated_positions, output_dir, iteration_index, z_level=0.5):
     plot_est = [list(p) if p is not None else None for p in estimated_positions]
 
     previous_prob_map = prev_risk_maps.get('prob_med_or_high')

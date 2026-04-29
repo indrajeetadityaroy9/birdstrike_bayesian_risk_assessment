@@ -21,7 +21,6 @@ from utils.logger import configure_logging, get_logger
 
 logger = get_logger(__name__)
 
-
 def _print_route_distribution(routes_col, route_counts):
     print(f"\nRoute Code Distribution:")
     print(f"  Total non-null routes: {len(route_counts):,}")
@@ -38,7 +37,6 @@ def _print_route_mapping(route_counts):
             print(f"Route {route_code:>2} → {info['direction']:<20} "f"(tendency={info['tendency']:+.2f}, peak={info['season']})")
         else:
             print(f"Route {route_code:>2} → Unknown (needs classification)")
-
 
 def _validate_route_gps_consistency(df, routes_col, gps_y_col):
     validation = []
@@ -62,7 +60,6 @@ def _validate_route_gps_consistency(df, routes_col, gps_y_col):
         print(f"\n  Overall consistency: {matched}/{total} ({matched/total*100:.1f}%)")
 
     return validation
-
 
 def analyze_routes(df, cols):
     routes_col = cols.get('routes')
@@ -90,13 +87,11 @@ def analyze_routes(df, cols):
         'validation': validation
     }
 
-
 def _print_gps_coverage(gps_data, gps_x_col, gps_y_col, total_records):
     print(f"\nGPS Data Coverage:")
     print(f"  Records with GPS: {len(gps_data):,} ({len(gps_data)/total_records*100:.1f}%)")
     print(f"  X range: [{gps_data[gps_x_col].min():.2f}, {gps_data[gps_x_col].max():.2f}]")
     print(f"  Y range: [{gps_data[gps_y_col].min():.2f}, {gps_data[gps_y_col].max():.2f}]")
-
 
 def _calculate_family_movement_metrics(family_data, gps_x_col, gps_y_col):
     x_displ = family_data[gps_x_col].max() - family_data[gps_x_col].min()
@@ -118,7 +113,6 @@ def _calculate_family_movement_metrics(family_data, gps_x_col, gps_y_col):
 
     return tendency, activity
 
-
 def _print_family_movement_patterns(df, family_col, gps_x_col, gps_y_col):
     print(f"\nMovement Patterns by Family:")
     max_families = MIGRATION_ANALYSIS_PARAMS['max_families_to_display']
@@ -132,7 +126,6 @@ def _print_family_movement_patterns(df, family_col, gps_x_col, gps_y_col):
             print(f"    GPS points: {len(family_data):>4}, "
                   f"Y displacement: {family_data[gps_y_col].max() - family_data[gps_y_col].min():+7.2f}, "
                   f"Tendency: {tendency:+.3f}, Activity: {activity:.2f}x")
-
 
 def analyze_gps_movements(df, cols):
     gps_x_col = cols.get('gps_x')
@@ -153,7 +146,6 @@ def analyze_gps_movements(df, cols):
         _print_family_movement_patterns(df, family_col, gps_x_col, gps_y_col)
 
     return {'gps_coverage': len(gps_data) / len(df), 'has_gps': True}
-
 
 def _extract_route_tendency_and_activity(season_data, routes_col, route_direction_map, family_data):
     tendency_from_routes = 0.0
@@ -176,7 +168,6 @@ def _extract_route_tendency_and_activity(season_data, routes_col, route_directio
 
     return tendency_from_routes, activity_from_routes
 
-
 def _extract_gps_tendency(season_data, gps_x_col, gps_y_col):
     if gps_x_col and gps_y_col:
         if gps_x_col in season_data.columns and gps_y_col in season_data.columns:
@@ -190,7 +181,6 @@ def _extract_gps_tendency(season_data, gps_x_col, gps_y_col):
                 )
     return None
 
-
 def _calculate_final_seasonal_metrics(tendency_from_routes, tendency_from_gps, activity_from_routes, season):
     final_tendency = tendency_from_routes
     if tendency_from_gps is not None:
@@ -202,7 +192,6 @@ def _calculate_final_seasonal_metrics(tendency_from_routes, tendency_from_gps, a
     final_activity = activity_from_routes * SEASON_BASELINE_ACTIVITY.get(season, 1.0)
 
     return final_tendency, final_activity
-
 
 def derive_seasonal_factors(df, route_direction_map, cols):
     family_col = cols.get('family')
@@ -257,7 +246,6 @@ def derive_seasonal_factors(df, route_direction_map, cols):
 
     return dict(seasonal_factors)
 
-
 def _report_route_analysis(routes):
     if not routes or 'route_counts' not in routes:
         return
@@ -272,7 +260,6 @@ def _report_route_analysis(routes):
         least_common = min(route_counts.items(), key=lambda x: x[1])
         print(f"  Most common route: {most_common[0]} ({most_common[1]:,} records)")
         print(f"  Least common route: {least_common[0]} ({least_common[1]:,} records)")
-
 
 def _report_route_gps_validation(routes):
     if not routes or not routes.get('validation'):
@@ -289,14 +276,12 @@ def _report_route_gps_validation(routes):
         print(f"  Consistent routes: {valid_count} ({consistency_pct:.1f}%)")
         print(f"  Inconsistent routes: {total - valid_count} ({100 - consistency_pct:.1f}%)")
 
-
 def _report_gps_coverage(gps):
     if not gps or 'gps_coverage' not in gps:
         return
 
     print(f"\nGPS Data Coverage:")
     print(f"  Records with GPS coordinates: {gps['gps_coverage']*100:.1f}%")
-
 
 def _calculate_seasonal_factor_statistics(factors):
     all_tendencies = []
@@ -313,7 +298,6 @@ def _calculate_seasonal_factor_statistics(factors):
                 season_counts[season] += 1
 
     return all_tendencies, all_activities, season_counts
-
 
 def _report_seasonal_factors(factors):
     if not factors:
@@ -338,7 +322,6 @@ def _report_seasonal_factors(factors):
         json.dump(factors, f, indent=2)
     print(f"\nSeasonal factors saved to: {SEASONAL_FACTORS_PRELIM_FILE}")
 
-
 def generate_report(analysis_results):
     logger.info("ANALYSIS SUMMARY")
     print()
@@ -354,14 +337,12 @@ def generate_report(analysis_results):
     factors = analysis_results.get('seasonal_factors')
     _report_seasonal_factors(factors)
 
-
 def _load_migration_data(filepath=DEFAULT_MIGRATION_DATA_PATH):
     print(f"Loading migration data from {filepath}...")
     df = pd.read_csv(filepath, low_memory=False)
     print(f"Loaded {len(df):,} records with {len(df.columns)} columns")
     cols = resolve_columns(df, MIGRATION_COLUMN_CANDIDATES)
     return df, cols
-
 
 def _run_all_analyses(df, cols):
     analysis_results = {}
@@ -372,13 +353,11 @@ def _run_all_analyses(df, cols):
 
     return analysis_results
 
-
 def main():
     configure_logging()
     df, cols = _load_migration_data()
     analysis_results = _run_all_analyses(df, cols)
     generate_report(analysis_results)
-
 
 if __name__ == "__main__":
     main()

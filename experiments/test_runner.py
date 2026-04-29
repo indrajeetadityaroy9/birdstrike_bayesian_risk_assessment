@@ -19,7 +19,7 @@ from experiments.constants import (
     SCENARIO_GROUPS,
     TEST_SCENARIOS,
 )
-from experiments.utils import (
+from experiments.experiment_utils import (
     create_initial_birds,
     setup_airport_scenario,
     simulate_radar_observations,
@@ -74,7 +74,6 @@ def compute_step_risk(positions, species_list, family_list, flight_paths,risk_sy
     
     return None
 
-
 def init_preprocessed_risk_system():
     system = BirdStrikeRiskSystem(
         faa_data_path="data/raw/wildlife_strikes.csv",
@@ -86,14 +85,12 @@ def init_preprocessed_risk_system():
     system.analyze_temporal_patterns()
     return system
 
-
 def init_migration_processor():
     return MigrationDataProcessor(
         seasonal_factors_path="data/processed/seasonal_factors.json",
         species_taxonomy_path="data/processed/species_taxonomy.json",
         use_preprocessed=True
     )
-
 
 class ComprehensiveTestRunner:
     
@@ -282,12 +279,12 @@ class ComprehensiveTestRunner:
 
         print("\nTracking Performance:")
         print(f"  Mean Position Error: {df['mean_position_error'].mean():.4f} km")
-        print(f"  Std Position Error:  {df['std_position_error'].mean():.4f} km")
-        print(f"  Max Position Error:  {df['max_position_error'].max():.4f} km")
+        print(f"  Std Position Error: {df['std_position_error'].mean():.4f} km")
+        print(f"  Max Position Error: {df['max_position_error'].max():.4f} km")
 
         print("\nRisk Assessment:")
-        print(f"  Mean Risk Level:     {df['mean_risk_probability'].mean():.3f}")
-        print(f"  Max Risk Level:      {df['max_risk_probability'].max():.3f}")
+        print(f"  Mean Risk Level: {df['mean_risk_probability'].mean():.3f}")
+        print(f"  Max Risk Level: {df['max_risk_probability'].max():.3f}")
         print(f"  Total Proximity Events: {df['proximity_events'].sum()}")
 
         print("\nPer-Scenario Results:")
@@ -378,18 +375,23 @@ class ComprehensiveTestRunner:
 
         logger.info("Bayesian validation complete")
         logger.info(f"Generated {len(predictions)} validation samples")
-        
+
         if predictions and ground_truth:
-            calibration_result = calibration.evaluate(np.array(predictions), np.array(ground_truth))
-            logger.info(f"Calibration ECE: {calibration_result.get('ece', 'N/A')}")
-            
+            calibration_result = calibration.generate_calibration_report(
+                np.array(predictions),
+                np.array(ground_truth),
+                species_groups=np.array(species_labels)
+            )
+            logger.info(f"Calibration ECE: {calibration_result['overall'].get('ece', 'N/A')}")
+            logger.info(f"Calibration MCE: {calibration_result['overall'].get('mce', 'N/A')}")
+            logger.info(f"Brier Score: {calibration_result['overall'].get('brier_score', 'N/A')}")
+
         return {
             'predictions': predictions,
             'ground_truth': ground_truth,
             'species_labels': species_labels,
             'calibration': calibration_result if 'calibration_result' in locals() else None
         }
-
 
 def convert_numpy_types(obj):
     if isinstance(obj, dict):
@@ -400,7 +402,6 @@ def convert_numpy_types(obj):
         return obj.item()
     else:
         return obj
-
 
 def main():
     parser = argparse.ArgumentParser(description="Comprehensive Test Runner")
@@ -443,7 +444,6 @@ def main():
         print(json.dumps(result, indent=2))
     
     logger.info("Test run completed")
-
 
 if __name__ == "__main__":
     main()

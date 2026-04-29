@@ -10,7 +10,7 @@ from models.risk_model import BirdStrikeRiskSystem
 from utils.geometry import calculate_distance_3d
 from utils.logger import configure_logging, get_logger
 from experiments.constants import FORCE_DEBUG_MODULES
-from experiments.utils import (
+from experiments.experiment_utils import (
     create_initial_birds,
     setup_airport_scenario,
     simulate_radar_observations,
@@ -72,8 +72,7 @@ def generate_report(results, output_dir, enable_plots=True):
     else:
         logger.info("Skipping plot generation (plotting disabled)")
 
-def run_simulation(num_iterations, num_birds, timestep, output_dir,
-                   faa_data_path, migration_data_path, seed, plot_interval, enable_plots=True):
+def run_simulation(num_iterations, num_birds, timestep, output_dir, faa_data_path, migration_data_path, seed, plot_interval, enable_plots=True):
     scenario = setup_airport_scenario()
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 

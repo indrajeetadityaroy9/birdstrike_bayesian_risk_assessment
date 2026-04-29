@@ -23,7 +23,6 @@ logger = get_logger(__name__)
 
 warnings.filterwarnings('ignore')
 
-
 class DataPreprocessor:
 
     def __init__(self, faa_path=DEFAULT_FAA_DATA_PATH, migration_path=DEFAULT_MIGRATION_DATA_PATH):
@@ -511,7 +510,6 @@ def main():
     configure_logging()
     preprocessor = DataPreprocessor()
     preprocessor.run()
-
 
 if __name__ == "__main__":
     main()

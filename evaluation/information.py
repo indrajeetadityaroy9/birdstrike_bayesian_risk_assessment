@@ -1,12 +1,12 @@
 import numpy as np
 import pandas as pd
 from scipy import stats
-from scipy.special import logsumexp
+from scipy.special import logsumexp, betaln, digamma
 from scipy.stats import entropy, beta
+import arviz as az
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
-
 
 class InformationMetrics:
 
@@ -15,126 +15,46 @@ class InformationMetrics:
         self.posterior_samples = []
 
     def waic(self, log_likelihood_samples):
-        lppd = np.sum(logsumexp(log_likelihood_samples, axis=0) - np.log(log_likelihood_samples.shape[0]))
+        ll_reshaped = log_likelihood_samples.T.reshape(1, -1, log_likelihood_samples.shape[1])
+        idata = az.convert_to_inference_data({'log_likelihood': ll_reshaped})
 
-        p_waic_1 = np.sum(np.var(log_likelihood_samples, axis=0))
-
-        mean_ll = np.mean(log_likelihood_samples, axis=0)
-        p_waic_2 = 2 * np.sum(mean_ll - logsumexp(log_likelihood_samples, axis=0) + np.log(log_likelihood_samples.shape[0]))
-
-        waic_1 = -2 * (lppd - p_waic_1)
-        waic_2 = -2 * (lppd - p_waic_2)
-
-        pointwise_waic = -2 * (logsumexp(log_likelihood_samples, axis=0) - np.log(log_likelihood_samples.shape[0]) -
-                               np.var(log_likelihood_samples, axis=0))
-        se_waic = np.sqrt(log_likelihood_samples.shape[1] * np.var(pointwise_waic))
+        waic_result = az.waic(idata, pointwise=True)
 
         return {
-            'waic': waic_1,
-            'waic_alt': waic_2,
-            'lppd': lppd,
-            'p_waic': p_waic_1,
-            'p_waic_alt': p_waic_2,
-            'se_waic': se_waic,
-            'pointwise_waic': pointwise_waic
+            'waic': waic_result.elpd_waic * -2,
+            'waic_alt': waic_result.elpd_waic * -2,
+            'lppd': waic_result.elpd_waic,
+            'p_waic': waic_result.p_waic,
+            'p_waic_alt': waic_result.p_waic,
+            'se_waic': waic_result.se,
+            'pointwise_waic': waic_result.waic_i if hasattr(waic_result, 'waic_i') else None,
+            'warning': waic_result.warning if hasattr(waic_result, 'warning') else False
         }
 
     def loo_cv(self, log_likelihood_samples):
-        n_samples, n_obs = log_likelihood_samples.shape
+        ll_reshaped = log_likelihood_samples.T.reshape(1, -1, log_likelihood_samples.shape[1])
+        idata = az.convert_to_inference_data({'log_likelihood': ll_reshaped})
 
-        loo_log_likes = []
-        pareto_k_values = []
+        loo_result = az.loo(idata, pointwise=True)
 
-        for i in range(n_obs):
-            log_weights = log_likelihood_samples[:, i]
-
-            k, smoothed_weights = self._psis_smooth(log_weights)
-            pareto_k_values.append(k)
-
-            loo_lpd = logsumexp(log_weights, b=np.exp(smoothed_weights - np.max(smoothed_weights)))
-            loo_log_likes.append(loo_lpd)
-
-        elpd_loo = np.sum(loo_log_likes)
-        loo = -2 * elpd_loo
-
-        p_loo = np.sum([logsumexp(log_likelihood_samples[:, i], axis=0) - np.log(n_samples) - loo_log_likes[i]
-                        for i in range(n_obs)])
-
+        pareto_k = loo_result.pareto_k.values if hasattr(loo_result, 'pareto_k') else []
         k_warnings = {
-            'good': np.sum(np.array(pareto_k_values) < 0.5),
-            'ok': np.sum((np.array(pareto_k_values) >= 0.5) & (np.array(pareto_k_values) < 0.7)),
-            'bad': np.sum((np.array(pareto_k_values) >= 0.7) & (np.array(pareto_k_values) < 1)),
-            'very_bad': np.sum(np.array(pareto_k_values) >= 1)
+            'good': np.sum(pareto_k < 0.5),
+            'ok': np.sum((pareto_k >= 0.5) & (pareto_k < 0.7)),
+            'bad': np.sum((pareto_k >= 0.7) & (pareto_k < 1)),
+            'very_bad': np.sum(pareto_k >= 1)
         }
 
         return {
-            'loo': loo,
-            'elpd_loo': elpd_loo,
-            'p_loo': p_loo,
-            'pareto_k': pareto_k_values,
+            'loo': loo_result.elpd_loo * -2,
+            'elpd_loo': loo_result.elpd_loo,
+            'p_loo': loo_result.p_loo,
+            'pareto_k': pareto_k,
             'k_diagnostics': k_warnings,
-            'mean_pareto_k': np.mean(pareto_k_values)
+            'mean_pareto_k': np.mean(pareto_k),
+            'se_loo': loo_result.se if hasattr(loo_result, 'se') else np.nan,
+            'warning': loo_result.warning if hasattr(loo_result, 'warning') else False
         }
-
-    def _psis_smooth(self, log_weights):
-        log_weights = log_weights - np.max(log_weights)
-        weights = np.exp(log_weights)
-
-        sorted_weights = np.sort(weights)[::-1]
-
-        n_tail = max(int(0.2 * len(weights)), 5)
-        tail_weights = sorted_weights[:n_tail]
-
-        if len(tail_weights) > 1 and np.min(tail_weights) > 0:
-            k = self._estimate_pareto_k(tail_weights)
-
-            if k > 0.7:
-                smoothed = self._smooth_tail(sorted_weights, k)
-                return k, np.log(smoothed)
-        else:
-            k = 0
-
-        return k, log_weights
-
-    def _estimate_pareto_k(self, tail_weights):
-        n = len(tail_weights)
-        min_weight = np.min(tail_weights)
-
-        if n <= 1 or min_weight <= 1e-10:
-            return 0.0
-
-        if np.any(tail_weights <= 0):
-            return 0.0
-
-        try:
-            log_ratios = np.log(tail_weights / min_weight)
-            mean_log_ratio = np.mean(log_ratios)
-
-            if mean_log_ratio < 1e-10:
-                return 0.0
-
-            k = 1.0 / mean_log_ratio
-
-            k = np.clip(k, -10.0, 10.0)
-        except (ValueError, RuntimeWarning, FloatingPointError):
-            k = 0.0
-
-        return k
-
-    def _smooth_tail(self, weights, k):
-        n = len(weights)
-        n_tail = max(int(0.2 * n), 5)
-
-        smoothed = weights.copy()
-
-        if k > 0:
-            tail_cutoff = weights[n_tail]
-            for i in range(n_tail):
-                if weights[i] > tail_cutoff:
-                    # Apply smoothing formula
-                    smoothed[i] = tail_cutoff * ((i + 1) / (n_tail + 1)) ** (-1/k)
-
-        return smoothed
 
     def mutual_information(self, x, y, n_bins=10):
         x_bins = np.histogram_bin_edges(x, bins=n_bins)
@@ -160,8 +80,7 @@ class InformationMetrics:
 
         return mi
 
-    def information_gain_decomposition(self, predictions,
-                                       features):
+    def information_gain_decomposition(self, predictions, features):
         results = []
 
         h_pred = entropy(np.histogram(predictions, bins=20)[0] + 1e-10)
@@ -184,10 +103,7 @@ class InformationMetrics:
 
         return pd.DataFrame(results).sort_values('mutual_information', ascending=False)
 
-    def expected_information_gain(self, current_posterior_alpha,
-                                  current_posterior_beta,
-                                  n_future_observations=10,
-                                  n_simulations=1000):
+    def expected_information_gain(self, current_posterior_alpha, current_posterior_beta, n_future_observations=10, n_simulations=1000):
         current_kl = 0
 
         future_kls = []
@@ -223,8 +139,6 @@ class InformationMetrics:
         }
 
     def _beta_kl_divergence(self, a1, b1, a2, b2):
-        from scipy.special import betaln, digamma
-
         kl = betaln(a2, b2) - betaln(a1, b1)
         kl += (a1 - a2) * digamma(a1)
         kl += (b1 - b2) * digamma(b1)
@@ -232,8 +146,7 @@ class InformationMetrics:
 
         return kl
 
-    def sensitivity_analysis(self, prior_params,
-                             observations):
+    def sensitivity_analysis(self, prior_params, observations):
         successes, failures = observations
         results = []
 
@@ -254,7 +167,6 @@ class InformationMetrics:
                 successes, failures, prior_alpha, prior_beta))
             bayes_factor = current_marginal / uniform_marginal
 
-            # Information gain
             kl_gain = self._beta_kl_divergence(post_alpha, post_beta, prior_alpha, prior_beta)
 
             results.append({
@@ -271,10 +183,7 @@ class InformationMetrics:
 
         return pd.DataFrame(results)
 
-    def _beta_log_marginal_likelihood(self, successes, failures,
-                                      prior_alpha, prior_beta):
-        from scipy.special import betaln
-
+    def _beta_log_marginal_likelihood(self, successes, failures, prior_alpha, prior_beta):
         log_ml = betaln(successes + prior_alpha, failures + prior_beta)
         log_ml -= betaln(prior_alpha, prior_beta)
 
@@ -304,13 +213,13 @@ class InformationMetrics:
 
         print(f"\n3. SUMMARY STATISTICS")
         print("-"*80)
-        print(f"Total features analyzed:        {len(info_df)}")
-        print(f"Average mutual information:     {info_df['mutual_information'].mean():.6f} nats")
-        print(f"Total information (sum):        {info_df['mutual_information'].sum():.6f} nats")
-        print(f"Max mutual information:         {info_df['mutual_information'].max():.6f} nats")
-        print(f"Min mutual information:         {info_df['mutual_information'].min():.6f} nats")
-        print(f"Average normalized MI:          {info_df['normalized_mi'].mean():.6f}")
-        print(f"Average gain ratio:             {info_df['gain_ratio'].mean():.6f}")
+        print(f"Total features analyzed: {len(info_df)}")
+        print(f"Average mutual information: {info_df['mutual_information'].mean():.6f} nats")
+        print(f"Total information (sum): {info_df['mutual_information'].sum():.6f} nats")
+        print(f"Max mutual information: {info_df['mutual_information'].max():.6f} nats")
+        print(f"Min mutual information: {info_df['mutual_information'].min():.6f} nats")
+        print(f"Average normalized MI: {info_df['normalized_mi'].mean():.6f}")
+        print(f"Average gain ratio: {info_df['gain_ratio'].mean():.6f}")
 
         print("\n" + "="*80)
 
@@ -367,14 +276,14 @@ class InformationMetrics:
 
         print(f"\n4. SUMMARY")
         print("-"*80)
-        print(f"Total models compared:          {len(model_names)}")
-        print(f"WAIC range:                     [{np.nanmin(waic_values):.4f}, {np.nanmax(waic_values):.4f}]")
-        print(f"LOO range:                      [{np.nanmin(loo_values):.4f}, {np.nanmax(loo_values):.4f}]")
-        print(f"Average effective parameters:   {np.mean(p_waic):.4f} (WAIC), {np.mean(p_loo):.4f} (LOO)")
+        print(f"Total models compared: {len(model_names)}")
+        print(f"WAIC range: [{np.nanmin(waic_values):.4f}, {np.nanmax(waic_values):.4f}]")
+        print(f"LOO range: [{np.nanmin(loo_values):.4f}, {np.nanmax(loo_values):.4f}]")
+        print(f"Average effective parameters: {np.mean(p_waic):.4f} (WAIC), {np.mean(p_loo):.4f} (LOO)")
 
         waic_diff = np.nanmax(waic_values) - np.nanmin(waic_values)
         loo_diff = np.nanmax(loo_values) - np.nanmin(loo_values)
-        print(f"WAIC difference (max-min):      {waic_diff:.4f}")
-        print(f"LOO difference (max-min):       {loo_diff:.4f}")
+        print(f"WAIC difference (max-min): {waic_diff:.4f}")
+        print(f"LOO difference (max-min): {loo_diff:.4f}")
 
         print("\n" + "="*80)

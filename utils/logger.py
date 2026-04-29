@@ -14,7 +14,6 @@ def configure_logging(level=logging.INFO):
         _CONFIGURED = True
     root_logger.setLevel(level)
 
-
 def get_logger(name=None, level=logging.INFO):
     configure_logging(level)
     logger = logging.getLogger(name if name else "birdstrike")

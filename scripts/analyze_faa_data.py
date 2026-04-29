@@ -12,7 +12,6 @@ from utils.logger import configure_logging, get_logger
 
 logger = get_logger(__name__)
 
-
 def analyze_taxonomy(df, cols):
     logger.info("SPECIES & TAXONOMY ANALYSIS")
 
@@ -112,7 +111,6 @@ def analyze_taxonomy(df, cols):
 
     return taxonomy_summary
 
-
 def analyze_temporal_and_quality(df, cols):
     logger.info("TEMPORAL & DATA QUALITY ANALYSIS")
 
@@ -127,7 +125,7 @@ def analyze_temporal_and_quality(df, cols):
             if pd.notna(month) and 1 <= month <= 12:
                 pct = count / len(df) * 100
                 month_name = MONTH_LABELS[int(month) - 1]
-                bar = '#' * int(pct)
+                bar = '
                 print(f"  {month_name} (M{int(month):02d}): {count:>7,} ({pct:5.2f}%) {bar}")
 
         df['Season'] = df[month_col].apply(month_to_season)
@@ -196,7 +194,6 @@ def analyze_temporal_and_quality(df, cols):
 
     return {'temporal': month_summary, 'quality': quality_summary}
 
-
 def generate_report(taxonomy_results, tq_results):
     logger.info("ANALYSIS SUMMARY")
     print()
@@ -232,7 +229,6 @@ def generate_report(taxonomy_results, tq_results):
     if total_records is not None:
         print(f"\nTotal Records Analyzed: {total_records:,}")
 
-
 def main():
     configure_logging()
     logger.info("Loading FAA wildlife strike data...")
@@ -243,7 +239,6 @@ def main():
     taxonomy_results = analyze_taxonomy(df, cols)
     tq_results = analyze_temporal_and_quality(df, cols)
     generate_report(taxonomy_results, tq_results)
-
 
 if __name__ == "__main__":
     main()

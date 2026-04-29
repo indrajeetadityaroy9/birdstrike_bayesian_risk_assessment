@@ -4,10 +4,11 @@ from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import brier_score_loss, roc_curve, auc, log_loss
 from scipy import stats
+from netcal.metrics import ECE as NetCalECE
+from netcal.metrics import MCE as NetCalMCE
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
-
 
 class BayesianCalibration:
 
@@ -19,37 +20,17 @@ class BayesianCalibration:
         if n_bins is None:
             n_bins = self.n_bins
 
-        bin_boundaries = np.linspace(0, 1, n_bins + 1)
-        bin_centers = (bin_boundaries[:-1] + bin_boundaries[1:]) / 2
-
-        ece = 0.0
-        for i in range(n_bins):
-            in_bin = (y_prob > bin_boundaries[i]) & (y_prob <= bin_boundaries[i + 1])
-            prop_in_bin = np.mean(in_bin)
-
-            if prop_in_bin > 0:
-                avg_pred_in_bin = np.mean(y_prob[in_bin])
-                avg_true_in_bin = np.mean(y_true[in_bin])
-                ece += np.abs(avg_pred_in_bin - avg_true_in_bin) * prop_in_bin
-
-        return ece
+        ece_calculator = NetCalECE(bins=n_bins)
+        ece = ece_calculator.measure(y_prob.reshape(-1, 1), y_true.reshape(-1, 1))
+        return float(ece)
 
     def maximum_calibration_error(self, y_prob, y_true, n_bins=None):
         if n_bins is None:
             n_bins = self.n_bins
 
-        bin_boundaries = np.linspace(0, 1, n_bins + 1)
-
-        mce = 0.0
-        for i in range(n_bins):
-            in_bin = (y_prob > bin_boundaries[i]) & (y_prob <= bin_boundaries[i + 1])
-
-            if np.sum(in_bin) > 0:
-                avg_pred_in_bin = np.mean(y_prob[in_bin])
-                avg_true_in_bin = np.mean(y_true[in_bin])
-                mce = max(mce, np.abs(avg_pred_in_bin - avg_true_in_bin))
-
-        return mce
+        mce_calculator = NetCalMCE(bins=n_bins)
+        mce = mce_calculator.measure(y_prob.reshape(-1, 1), y_true.reshape(-1, 1))
+        return float(mce)
 
     def adaptive_calibration_error(self, y_prob, y_true, p=2):
         sorted_indices = np.argsort(y_prob)
@@ -111,10 +92,7 @@ class BayesianCalibration:
             'reliability_resolution_diff': reliability - resolution
         }
 
-    def calibration_curve_with_confidence(self, y_prob, y_true,
-                                          n_bins=None,
-                                          n_bootstrap=100,
-                                          confidence_level=0.95):
+    def calibration_curve_with_confidence(self, y_prob, y_true, n_bins=None, n_bootstrap=100, confidence_level=0.95):
         if n_bins is None:
             n_bins = self.n_bins
 
@@ -163,8 +141,7 @@ class BayesianCalibration:
 
         return y_prob_calibrated, iso_reg
 
-    def roc_analysis_with_confidence(self, y_prob, y_true,
-                                     n_bootstrap=100):
+    def roc_analysis_with_confidence(self, y_prob, y_true, n_bootstrap=100):
         fpr, tpr, thresholds = roc_curve(y_true, y_prob)
         roc_auc = auc(fpr, tpr)
 
@@ -204,8 +181,7 @@ class BayesianCalibration:
             'optimal_fpr': fpr[optimal_idx]
         }
 
-    def print_calibration_suite(self, y_prob, y_true,
-                                title_prefix=""):
+    def print_calibration_suite(self, y_prob, y_true, title_prefix=""):
         print("\n" + "="*80)
         print(f"{title_prefix}CALIBRATION ANALYSIS SUITE")
         print("="*80)
@@ -217,7 +193,7 @@ class BayesianCalibration:
         print(f"\n1. RELIABILITY DIAGRAM")
         print("-"*80)
         print(f"Expected Calibration Error (ECE): {ece:.6f}")
-        print(f"Maximum Calibration Error (MCE):  {mce:.6f}")
+        print(f"Maximum Calibration Error (MCE): {mce:.6f}")
         print(f"\nCalibration Curve Data ({calib_data['confidence_level']:.0%} confidence intervals):")
         print(f"{'Mean Predicted':<20} {'Fraction Positive':<20} {'Lower Bound':<15} {'Upper Bound':<15}")
         print("-"*70)
@@ -245,26 +221,23 @@ class BayesianCalibration:
         print(f"\n3. ROC CURVE ANALYSIS")
         print("-"*80)
         roc_data = self.roc_analysis_with_confidence(y_prob, y_true)
-        print(f"Area Under Curve (AUC):     {roc_data['auc']:.6f}")
-        print(f"AUC Mean (bootstrap):       {roc_data['auc_mean']:.6f}")
-        print(f"AUC Std (bootstrap):        {roc_data['auc_std']:.6f}")
-        print(f"AUC 95% CI:                 [{roc_data['auc_ci'][0]:.6f}, {roc_data['auc_ci'][1]:.6f}]")
+        print(f"Area Under Curve (AUC): {roc_data['auc']:.6f}")
+        print(f"AUC Mean (bootstrap): {roc_data['auc_mean']:.6f}")
+        print(f"AUC Std (bootstrap): {roc_data['auc_std']:.6f}")
+        print(f"AUC 95% CI: [{roc_data['auc_ci'][0]:.6f}, {roc_data['auc_ci'][1]:.6f}]")
         print(f"\nOptimal Operating Point:")
-        print(f"  Threshold:                {roc_data['optimal_threshold']:.6f}")
+        print(f"  Threshold: {roc_data['optimal_threshold']:.6f}")
         print(f"  True Positive Rate (TPR): {roc_data['optimal_tpr']:.6f}")
-        print(f"  False Positive Rate (FPR):{roc_data['optimal_fpr']:.6f}")
+        print(f"  False Positive Rate (FPR): {roc_data['optimal_fpr']:.6f}")
 
         print(f"\n4. BRIER SCORE DECOMPOSITION")
         print("-"*80)
         bs_decomp = self.brier_score_decomposition(y_prob, y_true)
-        print(f"Brier Score:                {bs_decomp['brier_score']:.6f}")
-        print(f"Reliability (miscalibration):{bs_decomp['reliability']:.6f}")
+        print(f"Brier Score: {bs_decomp['brier_score']:.6f}")
+        print(f"Reliability (miscalibration): {bs_decomp['reliability']:.6f}")
         print(f"Resolution (discrimination): {bs_decomp['resolution']:.6f}")
-        print(f"Uncertainty (irreducible):   {bs_decomp['uncertainty']:.6f}")
-        print(f"Reliability - Resolution:    {bs_decomp['reliability_resolution_diff']:.6f}")
-        print(f"\nNote: Lower Brier Score is better")
-        print(f"      Lower Reliability (miscalibration) is better")
-        print(f"      Higher Resolution (discrimination) is better")
+        print(f"Uncertainty (irreducible): {bs_decomp['uncertainty']:.6f}")
+        print(f"Reliability - Resolution: {bs_decomp['reliability_resolution_diff']:.6f}")
 
         print(f"\n5. CALIBRATION ERROR BY PROBABILITY RANGE")
         print("-"*80)
@@ -295,9 +268,9 @@ class BayesianCalibration:
         ece_original = self.expected_calibration_error(y_prob, y_true)
         ece_calibrated = self.expected_calibration_error(y_prob_calibrated, y_true)
 
-        print(f"ECE Before Recalibration:   {ece_original:.6f}")
-        print(f"ECE After Recalibration:    {ece_calibrated:.6f}")
-        print(f"ECE Improvement:            {ece_original - ece_calibrated:.6f} ({((ece_original - ece_calibrated)/ece_original*100):.2f}%)")
+        print(f"ECE Before Recalibration: {ece_original:.6f}")
+        print(f"ECE After Recalibration: {ece_calibrated:.6f}")
+        print(f"ECE Improvement: {ece_original - ece_calibrated:.6f} ({((ece_original - ece_calibrated)/ece_original*100):.2f}%)")
 
         print(f"\nRecalibration Mapping (sample points):")
         print(f"{'Original Prob':<20} {'Recalibrated Prob':<20} {'Adjustment':<15}")
@@ -312,9 +285,7 @@ class BayesianCalibration:
 
         print("="*80)
 
-    def generate_calibration_report(self, y_prob, y_true,
-                                    species_groups=None,
-                                    temporal_bins=None):
+    def generate_calibration_report(self, y_prob, y_true, species_groups=None, temporal_bins=None):
         report = {
             'overall': {},
             'by_species': {},

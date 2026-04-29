@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import WhiteKernel, Matern, ConstantKernel
 import datetime
@@ -578,7 +579,6 @@ class SequentialGPRiskMapper:
                 try:
                     pos_std = bird_trackers[i].get_position_uncertainty()[:2]
                     if np.all(pos_std > 1e-6):
-                        from matplotlib.patches import Ellipse
                         ellipse = Ellipse(
                             xy=est_pos[:2], width=2 * pos_std[0] * 2, height=2 * pos_std[1] * 2,
                             edgecolor='darkorange', facecolor='none', linestyle='--',

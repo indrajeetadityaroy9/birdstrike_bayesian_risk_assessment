@@ -23,7 +23,6 @@ Thumbs.db
 *.log
 logs/
 *.tex
-*.pdf
 *.aux
 *.out
 *.toc

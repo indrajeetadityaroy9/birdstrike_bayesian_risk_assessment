@@ -16,8 +16,7 @@ DEFAULT_SEASONAL_FACTORS = {
 }
 
 class MigrationDataProcessor:
-    def __init__(self, migration_data_path=None, seasonal_factors_path='seasonal_factors.json',
-                 species_taxonomy_path='species_taxonomy.json', use_preprocessed=True):
+    def __init__(self, migration_data_path=None, seasonal_factors_path='seasonal_factors.json', species_taxonomy_path='species_taxonomy.json', use_preprocessed=True):
         
         self.data_path = migration_data_path
         self.use_preprocessed = use_preprocessed
@@ -98,10 +97,8 @@ class MigrationDataProcessor:
         family_patterns = self.movement_patterns.get(family)
         return family_patterns.get(season.lower(), default_pattern).copy() if family_patterns else default_pattern
 
-
 class BirdStateTracker:
-    def __init__(self, bird_id, initial_position, initial_uncertainty=None,
-                 species_group='Unknown', family_group='Unknown'):
+    def __init__(self, bird_id, initial_position, initial_uncertainty=None, species_group='Unknown', family_group='Unknown'):
         self.bird_id = bird_id
         self.species_group = species_group
         self.family_group = family_group
@@ -182,7 +179,6 @@ class BirdStateTracker:
     def get_position_uncertainty(self):
         return np.sqrt(np.diag(self.kf.P[:3, :3]))
 
-
 def get_bird_priors(position, season, family='Unknown', species='Unknown', migration_processor=None):
     prior_mu = tuple(position)
     seasonal_pattern = SEASONAL_FACTORS.get(season.capitalize(), SEASONAL_FACTORS['default']).copy()
@@ -192,7 +188,6 @@ def get_bird_priors(position, season, family='Unknown', species='Unknown', migra
         seasonal_pattern = pattern_data
 
     return {'mu': prior_mu, 'seasonal_pattern': seasonal_pattern}
-
 
 def simulate_bird_movement(current_positions, trackers, season, dt=1.0, migration_processor=None):
     new_true_positions = []
@@ -219,7 +214,6 @@ def simulate_bird_movement(current_positions, trackers, season, dt=1.0, migratio
         new_true_positions.append(tuple(new_true_pos))
 
     return new_true_positions
-
 
 def initialize_bird_trackers(initial_positions, species_list=None, family_list=None):
     trackers = []

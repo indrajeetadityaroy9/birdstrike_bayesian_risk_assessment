@@ -14,15 +14,7 @@ def setup_airport_scenario():
     logger.debug("Setting up default airport scenario.")
     return DEFAULT_SCENARIO.copy()
 
-def create_initial_birds(
-    num_birds,
-    scenario,
-    season=None,
-    seed=None,
-    species_dist_path='data/processed/species_distributions.json',
-    species_tax_path='data/processed/species_taxonomy.json',
-    use_preprocessed=True,
-):
+def create_initial_birds(num_birds, scenario, season=None, seed=None, species_dist_path='data/processed/species_distributions.json', species_tax_path='data/processed/species_taxonomy.json', use_preprocessed=True):
     if seed is not None:
         np.random.seed(seed)
 
@@ -100,7 +92,6 @@ def create_initial_birds(
     )
 
     return positions, species_list, family_list
-
 
 def simulate_radar_observations(true_positions, sensors):
     observations = []
